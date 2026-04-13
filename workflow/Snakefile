@@ -1,0 +1,53 @@
+import yaml
+
+def builds_with(key): 
+    return {f"{entry['species']}/{build}": (entry[key]['directory'], entry[key]['prefix']) for build, entry in registry.items() if entry.get(key)}
+
+def genome_path(build):
+    return f"{config['genome_dir']}/{build}/{GENOMES[build]}"
+
+def annotation_path(build):
+    return f"{config['genome_dir']}/{build}/{ANNOTATIONS[build]}"
+
+def bowtie2_outputs():
+    outputs = []
+    for build, (index_dir, index_name) in BOWTIE2_BUILDS.items():
+        prefix = f"{config['genome_dir']}/{build}/{index_dir}/{index_name}"
+        outputs.extend([f"{prefix}.{i}.bt2" for i in ['1', '2', '3', '4', 'rev.1', 'rev.2']])
+    return outputs
+
+def hisat2_outputs():
+    outputs = []
+    for build, (index_dir, index_name) in HISAT2_BUILDS.items():
+        prefix = f"{config['genome_dir']}/{build}/{index_dir}/{index_name}"
+        outputs.extend([f"{prefix}.{i}.ht2" for i in range(1, 9)])
+    return outputs
+
+wildcard_constraints:
+    builds=r"[^/]+/[^/]+",
+    genome=r".*\.(?i:fa|fna|fasta)",
+    annotation = r".*\.gtf"
+
+with open(config['genome_registry'], 'r') as registry_infile:
+    registry = yaml.safe_load(registry_infile)
+
+SPECIES = {k: v["species"] for k, v in registry.items()}
+BUILDS = [f"{SPECIES[k]}/{k}" for k in registry.keys()]
+GENOMES = {f"{SPECIES[k]}/{k}": v["genome"] for k, v in registry.items()}
+GENOME_URLS = {f"{SPECIES[k]}/{k}": v["genome_url"] for k, v in registry.items()}
+ANNOTATIONS = {f"{SPECIES[k]}/{k}": v["annotation"] for k, v in registry.items()}
+ANNOTATION_URLS = {f"{SPECIES[k]}/{k}": v["annotation_url"] for k, v in registry.items()}
+
+BOWTIE2_BUILDS = builds_with("bowtie2_index") 
+HISAT2_BUILDS = builds_with("hisat2_index")
+
+include: "rules/download.smk"
+include: "rules/hisat2.smk"
+include: "rules/bowtie2.smk"
+
+rule all:
+    input:
+        [genome_path(b) for b in BUILDS],
+        [annotation_path(b) for b in BUILDS],
+        bowtie2_outputs(),
+        hisat2_outputs()

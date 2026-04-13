@@ -1,0 +1,4 @@
+config/config.yaml
+.snakemake
+README_files
+README.html
